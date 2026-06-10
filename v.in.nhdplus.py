@@ -79,18 +79,13 @@
 #%end
 
 #%option
-#%  key: spatial_relation
+#%  key: boundary
 #%  type: string
-#%  label: Spatial relationship between features and query area
-#%  options: intersects,within
-#%  answer: intersects
+#%  label: How to handle features that cross the query area boundary
+#%  options: all,clip,complete
+#%  answer: all
 #%  required: no
-#%  description: intersects=include features touching the boundary; within=only features entirely enclosed
-#%end
-
-#%flag
-#%  key: c
-#%  description: Clip output maps to the current GRASS computational region
+#%  description: all=include all touching features with full geometry; clip=trim features at boundary; complete=only features entirely within query area
 #%end
 
 import os
@@ -325,7 +320,7 @@ def fetch_catchments(source, query_geom, spatial_relation):
 
 
 def main():
-    options, flags = gs.parser()
+    options, flags = gs.parser()  # noqa: F841  (flags unused after -c removal)
     atexit.register(cleanup)
 
     output        = options['output']
@@ -334,8 +329,7 @@ def main():
     source        = options['source']
     hucs_str      = options['hucs'] or ''
     huc_level_str = options['huc_level'] or ''
-    spatial_rel   = options['spatial_relation']
-    flag_c        = flags['c']
+    boundary      = options['boundary']
 
     require_package('pynhd')
     require_package('geopandas')
@@ -356,7 +350,7 @@ def main():
 
     bbox = get_geographic_bbox()
     gs.message("Bounding box (WGS84): W={:.4f} S={:.4f} E={:.4f} N={:.4f}".format(*bbox))
-    gs.message("Spatial relation: {}".format(spatial_rel))
+    gs.message("Boundary handling: {}".format(boundary))
 
     if huc_list:
         gs.message("HUC filter: {} HUC{} code(s)".format(
@@ -366,6 +360,10 @@ def main():
     query_geom = None
     if do_flowlines or do_catchments or (do_wbd and not huc_list):
         query_geom = get_query_geometry(huc_list, huc_list_level, bbox)
+
+    # Map boundary= to the spatial filter passed to fetch functions and post-import clip
+    spatial_rel = 'within' if boundary == 'complete' else 'intersects'
+    do_clip     = boundary == 'clip'
 
     imported = []
 
@@ -381,8 +379,8 @@ def main():
         else:
             out_wbd = '{}_huc{}'.format(output, wbd_level)
             geodataframe_to_grass(gdf, out_wbd)
-            if flag_c:
-                gs.message("Clipping '{}' to computational region...".format(out_wbd))
+            if do_clip:
+                gs.message("Clipping '{}' to query area...".format(out_wbd))
                 clip_to_region(out_wbd)
             gs.message("WBD HUC{} imported to '{}'.".format(wbd_level, out_wbd))
             imported.append(out_wbd)
@@ -400,8 +398,8 @@ def main():
                 )
             out_fl = '{}_flowlines'.format(output)
             geodataframe_to_grass(gdf, out_fl)
-            if flag_c:
-                gs.message("Clipping '{}' to computational region...".format(out_fl))
+            if do_clip:
+                gs.message("Clipping '{}' to query area...".format(out_fl))
                 clip_to_region(out_fl)
             gs.message("Flowlines imported to '{}'.".format(out_fl))
             gs.message("  Columns: {}".format(
@@ -416,8 +414,8 @@ def main():
         else:
             out_cat = '{}_catchments'.format(output)
             geodataframe_to_grass(gdf, out_cat)
-            if flag_c:
-                gs.message("Clipping '{}' to computational region...".format(out_cat))
+            if do_clip:
+                gs.message("Clipping '{}' to query area...".format(out_cat))
                 clip_to_region(out_cat)
             gs.message("Catchments imported to '{}'.".format(out_cat))
             imported.append(out_cat)
@@ -432,10 +430,10 @@ def main():
             "Tip: flowlines and catchments share COMIDs via "
             "'comid' (flowlines) and 'featureid' (catchments)."
         )
-    if not flag_c:
+    if boundary == 'all':
         gs.message(
             "Note: v.import reprojects but does not clip to the "
-            "computational region. Use -c to clip, or v.clip afterward."
+            "computational region. Use boundary=clip to trim at the boundary."
         )
 
 

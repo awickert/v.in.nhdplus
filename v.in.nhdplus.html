@@ -129,70 +129,40 @@ with <b>hucs=</b> to download only the specified HUCs, or used alone to import a
 WBD units intersecting the current region.
 </p>
 
-<h3>Region and clipping behaviour</h3>
+<h3>Boundary handling (boundary=)</h3>
 
 <p>
-<em>v.import</em> (used internally) reprojects all features to the current
-GRASS location's CRS but does <b>not</b> clip them to the computational region.
-Features that intersect the query area are imported in full, even if they extend
-beyond the region boundary. This matches the behaviour of other GRASS vector
-import modules.
-</p>
-
-<p>
-Use the <b>-c</b> flag to clip all output maps to the computational region after
-import. Clipping is performed with <em>v.clip</em> and is applied in-place.
-Without <b>-c</b>, a reminder is printed at the end of the run.
-</p>
-
-<h3>Spatial relation (spatial_relation=)</h3>
-
-<p>
-The <b>spatial_relation=</b> option controls which features are retained
-relative to the query area (bounding box or dissolved HUC boundary):
+<em>v.import</em> (used internally) reprojects all features but does <b>not</b>
+clip them to the query area. The <b>boundary=</b> option controls how features
+that cross the query area boundary are handled:
 </p>
 
 <table>
   <tr>
-    <th>spatial_relation=</th><th>Behaviour</th>
+    <th>boundary=</th><th>Features returned</th><th>Geometry</th>
   </tr>
   <tr>
-    <td>intersects (default)</td>
-    <td>All features that touch the query area, including those that cross
-        its boundary. A catchment or HUC that straddles the region edge is
-        included in full.</td>
+    <td>all (default)</td>
+    <td>Every feature touching the query area</td>
+    <td>Full, unmodified geometry — features may extend beyond the boundary</td>
   </tr>
   <tr>
-    <td>within</td>
-    <td>Only features whose geometry lies entirely inside the query area.
-        Partial features at the boundary are excluded. Combine with <b>-c</b>
-        for the strictest result.</td>
+    <td>clip</td>
+    <td>Every feature touching the query area</td>
+    <td>Trimmed at the query area boundary using <em>v.clip</em></td>
+  </tr>
+  <tr>
+    <td>complete</td>
+    <td>Only features whose geometry lies entirely within the query area</td>
+    <td>Full, unmodified geometry — partial features are excluded</td>
   </tr>
 </table>
 
 <p>
-The two options are <b>alternatives</b> for handling boundary features, not
-complements:
-</p>
-
-<ul>
-  <li><b>spatial_relation=within</b> — excludes partial features entirely;
-      the result contains fewer features but all are geometrically complete.</li>
-  <li><b>-c</b> — retains all features but clips their geometries at the
-      region boundary; the result is spatially exhaustive but some features
-      are truncated.</li>
-</ul>
-
-<p>
-Using both together is redundant in the typical case (no <b>hucs=</b>): if
-every feature is already fully within the region, clipping changes nothing.
-The combination is only meaningful when <b>hucs=</b> defines a spatial domain
-larger than the computational region — in that case <tt>spatial_relation=within</tt>
-filters against the HUC boundary while <tt>-c</tt> clips to the (smaller)
-region, and the two operations act on different geometries.
-</p>
-
-<p>
+The three values are mutually exclusive strategies, not composable steps.
+<tt>all</tt> maximises spatial coverage; <tt>clip</tt> gives exact spatial
+exhaustiveness at the cost of splitting features; <tt>complete</tt> gives
+clean, uncut features at the cost of dropping those that straddle the boundary.
 The distinction matters most for polygon features (catchments, WBD units) at
 region boundaries. For flowlines it affects only reaches that cross the boundary.
 </p>
@@ -306,12 +276,12 @@ d.vect nhd_flowlines color=blue width_column=streamorde
 
 Import only catchments fully enclosed by the region (no partial polygons):
 <div class="code"><pre>
-v.in.nhdplus output=nhd type=catchments spatial_relation=within
+v.in.nhdplus output=nhd type=catchments boundary=complete
 </pre></div>
 
-Import and clip to the computational region:
+Import and clip all features to the query area boundary:
 <div class="code"><pre>
-v.in.nhdplus output=nhd -c
+v.in.nhdplus output=nhd boundary=clip
 </pre></div>
 
 
