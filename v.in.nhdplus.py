@@ -78,6 +78,21 @@
 #%  description: Imports {output}_hucN map. May be combined with hucs= or used alone.
 #%end
 
+#%option
+#%  key: spatial_relation
+#%  type: string
+#%  label: Spatial relationship between features and query area
+#%  options: intersects,within
+#%  answer: intersects
+#%  required: no
+#%  description: intersects=include features touching the boundary; within=only features entirely enclosed
+#%end
+
+#%flag
+#%  key: c
+#%  description: Clip output maps to the current GRASS computational region
+#%end
+
 import os
 import sys
 import tempfile
@@ -86,6 +101,7 @@ import atexit
 import grass.script as gs
 
 _TMPFILES = []
+_TMPVECTS = []
 
 _FLOWLINE_COLS = [
     'comid', 'gnis_name', 'streamorde', 'streamcalc',
@@ -101,6 +117,10 @@ def cleanup():
             os.unlink(f)
         except OSError:
             pass
+    for v in _TMPVECTS:
+        if gs.find_file(v, element='vector')['name']:
+            gs.run_command('g.remove', type='vector', name=v, flags='f',
+                           quiet=True)
 
 
 def _tmpfile(suffix=''):
@@ -148,6 +168,20 @@ def get_geographic_bbox():
     return min(lons), min(lats), max(lons), max(lats)
 
 
+def apply_spatial_relation(gdf, query_geom, relation):
+    """Post-filter a GeoDataFrame to the requested spatial relation.
+
+    Services always return features that intersect the query geometry.
+    For 'within', we further filter to features fully enclosed by it.
+    """
+    if relation == 'within':
+        before = len(gdf)
+        mask = gdf.geometry.within(query_geom)
+        gdf = gdf[mask]
+        gs.message("  {:,} → {:,} after 'within' filter.".format(before, len(gdf)))
+    return gdf
+
+
 def geodataframe_to_grass(gdf, output):
     """Write a GeoDataFrame to a GRASS vector map via GeoPackage + v.import."""
     if (os.path.exists('/usr/share/proj/proj.db')
@@ -166,6 +200,15 @@ def geodataframe_to_grass(gdf, output):
     gs.run_command('v.import', input=tmp_gpkg, output=output, overwrite=True)
 
 
+def clip_to_region(map_name):
+    """Clip a vector map to the current GRASS computational region in-place."""
+    tmp_region = 'v_nhdplus_region_{}'.format(os.getpid())
+    _TMPVECTS.append(tmp_region)
+    gs.run_command('v.in.region', output=tmp_region, overwrite=True)
+    gs.run_command('v.clip', input=map_name, clip=tmp_region,
+                   output=map_name, overwrite=True)
+
+
 def huc_level_from_codes(huc_list):
     """Infer HUC level from code lengths; all codes must be the same length."""
     lengths = set(len(h) for h in huc_list)
@@ -176,8 +219,7 @@ def huc_level_from_codes(huc_list):
                 ', '.join(str(l) for l in sorted(lengths)))
         )
     length = lengths.pop()
-    valid = {2, 4, 6, 8, 10, 12}
-    if length not in valid:
+    if length not in {2, 4, 6, 8, 10, 12}:
         gs.fatal(
             "HUC code length {} does not correspond to a valid HUC level "
             "(expected 2, 4, 6, 8, 10, or 12 digits).".format(length)
@@ -185,12 +227,8 @@ def huc_level_from_codes(huc_list):
     return length
 
 
-def fetch_wbd(level, bbox=None, huc_list=None):
-    """Fetch WBD watershed boundaries at a given HUC level.
-
-    If huc_list is given, fetches those specific HUCs by ID.
-    Otherwise fetches all HUCs intersecting bbox.
-    """
+def fetch_wbd(level, query_geom, huc_list=None, spatial_relation='intersects'):
+    """Fetch WBD watershed boundaries at a given HUC level."""
     from pynhd import WBD
     layer = 'huc{}'.format(level)
     gs.message("Querying WBD {} boundaries...".format(layer.upper()))
@@ -198,32 +236,39 @@ def fetch_wbd(level, bbox=None, huc_list=None):
     if huc_list:
         gdf = wbd.byids(layer, huc_list)
     else:
-        gdf = wbd.bybox(bbox)
+        gdf = wbd.bygeom(query_geom)
     if gdf is None or gdf.empty:
         return None
     gs.message("  {:,} {} unit(s) returned.".format(len(gdf), layer.upper()))
-    return gdf
+    gdf = apply_spatial_relation(gdf, query_geom, spatial_relation)
+    return gdf if not gdf.empty else None
 
 
 def get_query_geometry(huc_list, huc_list_level, bbox):
-    """Return a shapely geometry to use as the spatial filter for NHDPlus queries.
+    """Return the shapely geometry used for all spatial queries.
 
-    If HUC codes are given, dissolve their boundaries. Otherwise use bbox polygon.
+    If HUC codes are supplied, dissolves their boundaries.
+    Otherwise uses the bounding box as a rectangle.
     """
     from shapely.geometry import box as shapely_box
     if huc_list:
-        huc_gdf = fetch_wbd(huc_list_level, huc_list=huc_list)
+        from pynhd import WBD
+        layer = 'huc{}'.format(huc_list_level)
+        wbd = WBD(layer)
+        huc_gdf = wbd.byids(layer, huc_list)
         if huc_gdf is None or huc_gdf.empty:
             gs.fatal("Could not retrieve HUC boundaries for: {}".format(
                 ', '.join(huc_list)))
+        gs.message("  HUC filter: {:,} {} unit(s) retrieved.".format(
+            len(huc_gdf), layer.upper()))
         return huc_gdf.geometry.union_all()
     else:
         xmin, ymin, xmax, ymax = bbox
         return shapely_box(xmin, ymin, xmax, ymax)
 
 
-def fetch_flowlines(source, query_geom, min_order):
-    """Fetch flowlines within query_geom (shapely geometry)."""
+def fetch_flowlines(source, query_geom, min_order, spatial_relation):
+    """Fetch flowlines within query_geom."""
     if source == 'hr':
         from pynhd import NHDPlusHR
         gs.message("Querying NHDPlus HR flowlines...")
@@ -239,6 +284,10 @@ def fetch_flowlines(source, query_geom, min_order):
         return None
     gs.message("  {:,} flowline(s) returned.".format(len(gdf)))
 
+    gdf = apply_spatial_relation(gdf, query_geom, spatial_relation)
+    if gdf is None or gdf.empty:
+        return None
+
     if min_order > 1:
         order_col = next(
             (c for c in gdf.columns if 'streamorde' in c.lower()), None)
@@ -250,11 +299,11 @@ def fetch_flowlines(source, query_geom, min_order):
             gs.warning("Stream order column not found; min_order filter skipped.")
 
     keep = [c for c in _FLOWLINE_COLS if c in gdf.columns]
-    return gdf[keep]
+    return gdf[keep] if not gdf.empty else None
 
 
-def fetch_catchments(source, query_geom):
-    """Fetch catchments within query_geom (shapely geometry)."""
+def fetch_catchments(source, query_geom, spatial_relation):
+    """Fetch catchments within query_geom."""
     if source == 'hr':
         from pynhd import NHDPlusHR
         gs.message("Querying NHDPlus HR catchments...")
@@ -269,20 +318,24 @@ def fetch_catchments(source, query_geom):
     if gdf is None or gdf.empty:
         return None
     gs.message("  {:,} catchment(s) returned.".format(len(gdf)))
+
+    gdf = apply_spatial_relation(gdf, query_geom, spatial_relation)
     keep = [c for c in _CATCHMENT_COLS if c in gdf.columns]
-    return gdf[keep]
+    return gdf[keep] if not gdf.empty else None
 
 
 def main():
     options, flags = gs.parser()
     atexit.register(cleanup)
 
-    output    = options['output']
-    feat_type = options['type']
-    min_order = int(options['min_order'])
-    source    = options['source']
-    hucs_str  = options['hucs'] or ''
+    output        = options['output']
+    feat_type     = options['type']
+    min_order     = int(options['min_order'])
+    source        = options['source']
+    hucs_str      = options['hucs'] or ''
     huc_level_str = options['huc_level'] or ''
+    spatial_rel   = options['spatial_relation']
+    flag_c        = flags['c']
 
     require_package('pynhd')
     require_package('geopandas')
@@ -290,7 +343,6 @@ def main():
 
     import geopandas as gpd  # noqa: F401
 
-    # --- parse HUC codes ---
     huc_list = [h.strip() for h in hucs_str.split(',') if h.strip()]
     huc_list_level = huc_level_from_codes(huc_list) if huc_list else None
 
@@ -304,33 +356,40 @@ def main():
 
     bbox = get_geographic_bbox()
     gs.message("Bounding box (WGS84): W={:.4f} S={:.4f} E={:.4f} N={:.4f}".format(*bbox))
+    gs.message("Spatial relation: {}".format(spatial_rel))
 
     if huc_list:
-        gs.message("HUC filter: {} HUC{} code(s): {}".format(
-            len(huc_list), huc_list_level,
-            ', '.join(huc_list[:5]) + ('...' if len(huc_list) > 5 else '')
-        ))
+        gs.message("HUC filter: {} HUC{} code(s)".format(
+            len(huc_list), huc_list_level))
 
-    # Build the spatial query geometry once (shared by flowlines + catchments)
+    # Build the shared spatial query geometry
     query_geom = None
-    if do_flowlines or do_catchments:
+    if do_flowlines or do_catchments or (do_wbd and not huc_list):
         query_geom = get_query_geometry(huc_list, huc_list_level, bbox)
+
+    imported = []
 
     # --- WBD boundaries ---
     if do_wbd:
-        gdf = fetch_wbd(wbd_level, bbox=bbox if not huc_list else None,
-                        huc_list=huc_list if huc_list else None)
+        # When hucs= given, fetch exactly those HUCs by ID (no spatial filter needed)
+        gdf = fetch_wbd(wbd_level,
+                        query_geom=query_geom,
+                        huc_list=huc_list if huc_list else None,
+                        spatial_relation=spatial_rel if not huc_list else 'intersects')
         if gdf is None or gdf.empty:
             gs.warning("No HUC{} boundaries found.".format(wbd_level))
         else:
             out_wbd = '{}_huc{}'.format(output, wbd_level)
             geodataframe_to_grass(gdf, out_wbd)
-            gs.message("WBD HUC{} boundaries imported to '{}'.".format(
-                wbd_level, out_wbd))
+            if flag_c:
+                gs.message("Clipping '{}' to computational region...".format(out_wbd))
+                clip_to_region(out_wbd)
+            gs.message("WBD HUC{} imported to '{}'.".format(wbd_level, out_wbd))
+            imported.append(out_wbd)
 
     # --- flowlines ---
     if do_flowlines:
-        gdf = fetch_flowlines(source, query_geom, min_order)
+        gdf = fetch_flowlines(source, query_geom, min_order, spatial_rel)
         if gdf is None or gdf.empty:
             gs.warning("No flowlines found.")
         else:
@@ -341,24 +400,42 @@ def main():
                 )
             out_fl = '{}_flowlines'.format(output)
             geodataframe_to_grass(gdf, out_fl)
+            if flag_c:
+                gs.message("Clipping '{}' to computational region...".format(out_fl))
+                clip_to_region(out_fl)
             gs.message("Flowlines imported to '{}'.".format(out_fl))
             gs.message("  Columns: {}".format(
                 ', '.join(c for c in gdf.columns if c != 'geometry')))
+            imported.append(out_fl)
 
     # --- catchments ---
     if do_catchments:
-        gdf = fetch_catchments(source, query_geom)
+        gdf = fetch_catchments(source, query_geom, spatial_rel)
         if gdf is None or gdf.empty:
             gs.warning("No catchments found.")
         else:
             out_cat = '{}_catchments'.format(output)
             geodataframe_to_grass(gdf, out_cat)
+            if flag_c:
+                gs.message("Clipping '{}' to computational region...".format(out_cat))
+                clip_to_region(out_cat)
             gs.message("Catchments imported to '{}'.".format(out_cat))
+            imported.append(out_cat)
 
+    if not imported:
+        gs.warning("No features imported.")
+        return
+
+    gs.message("\nImported maps: {}".format(', '.join(imported)))
     if do_flowlines and do_catchments:
         gs.message(
             "Tip: flowlines and catchments share COMIDs via "
             "'comid' (flowlines) and 'featureid' (catchments)."
+        )
+    if not flag_c:
+        gs.message(
+            "Note: v.import reprojects but does not clip to the "
+            "computational region. Use -c to clip, or v.clip afterward."
         )
 
 

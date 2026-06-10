@@ -129,6 +129,52 @@ with <b>hucs=</b> to download only the specified HUCs, or used alone to import a
 WBD units intersecting the current region.
 </p>
 
+<h3>Region and clipping behaviour</h3>
+
+<p>
+<em>v.import</em> (used internally) reprojects all features to the current
+GRASS location's CRS but does <b>not</b> clip them to the computational region.
+Features that intersect the query area are imported in full, even if they extend
+beyond the region boundary. This matches the behaviour of other GRASS vector
+import modules.
+</p>
+
+<p>
+Use the <b>-c</b> flag to clip all output maps to the computational region after
+import. Clipping is performed with <em>v.clip</em> and is applied in-place.
+Without <b>-c</b>, a reminder is printed at the end of the run.
+</p>
+
+<h3>Spatial relation (spatial_relation=)</h3>
+
+<p>
+The <b>spatial_relation=</b> option controls which features are retained
+relative to the query area (bounding box or dissolved HUC boundary):
+</p>
+
+<table>
+  <tr>
+    <th>spatial_relation=</th><th>Behaviour</th>
+  </tr>
+  <tr>
+    <td>intersects (default)</td>
+    <td>All features that touch the query area, including those that cross
+        its boundary. A catchment or HUC that straddles the region edge is
+        included in full.</td>
+  </tr>
+  <tr>
+    <td>within</td>
+    <td>Only features whose geometry lies entirely inside the query area.
+        Partial features at the boundary are excluded. Combine with <b>-c</b>
+        for the strictest result.</td>
+  </tr>
+</table>
+
+<p>
+The distinction matters most for polygon features (catchments, WBD units) at
+region boundaries. For flowlines it affects only reaches that cross the boundary.
+</p>
+
 <h3>Composing hucs= and huc_level=</h3>
 
 <p>
@@ -234,6 +280,22 @@ Display stream network coloured by order:
 <div class="code"><pre>
 v.in.nhdplus output=nhd min_order=2
 d.vect nhd_flowlines color=blue width_column=streamorde
+</pre></div>
+
+Import only catchments fully enclosed by the region (no partial polygons):
+<div class="code"><pre>
+v.in.nhdplus output=nhd type=catchments spatial_relation=within
+</pre></div>
+
+Import and clip to the computational region:
+<div class="code"><pre>
+v.in.nhdplus output=nhd -c
+</pre></div>
+
+Strictly enclosed HUC8 units within a HUC2 region, clipped:
+<div class="code"><pre>
+v.in.nhdplus output=nhd type=none hucs=14 huc_level=8 \
+    spatial_relation=within -c
 </pre></div>
 
 Join catchments to gauge basin data from v.in.waterdata:
