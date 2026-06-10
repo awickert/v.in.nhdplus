@@ -124,6 +124,36 @@ with <b>hucs=</b> to download only the specified HUCs, or used alone to import a
 WBD units intersecting the current region.
 </p>
 
+<h3>Composing hucs= and huc_level=</h3>
+
+<p>
+The most powerful use of the module combines the two options: <b>hucs=</b> defines
+the study domain at a coarser level, while <b>huc_level=</b> subdivides it at a
+finer level — giving you the stream network, catchments, and watershed boundaries
+for a region, all in a single command:
+</p>
+
+<div class="code"><pre>
+v.in.nhdplus output=colorado hucs=14 huc_level=8 min_order=3
+</pre></div>
+
+<p>
+This imports all order-3+ flowlines and their catchments within HUC2 region 14
+(Upper Colorado River basin), together with the HUC8 subbasin boundaries that
+subdivide it. The result is immediately useful for watershed-scale modeling:
+flowlines and catchments provide the stream network; HUC8 polygons provide
+natural spatial units for aggregating forcing data, computing basin statistics,
+or organizing model parameterization.
+</p>
+
+<p>
+The spatial domain follows from the coarser HUC codes; the finer
+<b>huc_level=</b> does not need to nest inside them — for example,
+<tt>hucs=10190005 huc_level=12</tt> imports all HUC12 subwatershed boundaries
+within a single HUC8, making it easy to extract fine-scale drainage units
+within a target basin.
+</p>
+
 <h3>NHDPlus v2 vs. NHDPlus HR</h3>
 
 <p>
