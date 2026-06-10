@@ -34,13 +34,14 @@
 #%end
 
 #%option
-#%  key: type
+#%  key: layers
 #%  type: string
-#%  label: Feature type(s) to import
-#%  options: flowlines,catchments,both,none
-#%  answer: both
-#%  required: yes
-#%  description: Use none to import only WBD boundaries (requires huc_level=)
+#%  label: NHDPlus layers to import
+#%  options: flowlines,catchments
+#%  answer: flowlines,catchments
+#%  multiple: yes
+#%  required: no
+#%  description: Omit to import only WBD boundaries (requires huc_level=)
 #%end
 
 #%option
@@ -89,7 +90,6 @@
 #%end
 
 import os
-import sys
 import tempfile
 import atexit
 
@@ -324,7 +324,7 @@ def main():
     atexit.register(cleanup)
 
     output        = options['output']
-    feat_type     = options['type']
+    layers_str    = options['layers'] or ''
     min_order     = int(options['min_order'])
     source        = options['source']
     hucs_str      = options['hucs'] or ''
@@ -337,16 +337,17 @@ def main():
 
     import geopandas as gpd  # noqa: F401
 
+    layers = [l.strip() for l in layers_str.split(',') if l.strip()]
     huc_list = [h.strip() for h in hucs_str.split(',') if h.strip()]
     huc_list_level = huc_level_from_codes(huc_list) if huc_list else None
 
-    do_flowlines  = feat_type in ('flowlines', 'both')
-    do_catchments = feat_type in ('catchments', 'both')
+    do_flowlines  = 'flowlines' in layers
+    do_catchments = 'catchments' in layers
     do_wbd        = bool(huc_level_str)
     wbd_level     = int(huc_level_str) if huc_level_str else None
 
-    if feat_type == 'none' and not do_wbd:
-        gs.fatal("type=none requires huc_level= to have something to import.")
+    if not do_flowlines and not do_catchments and not do_wbd:
+        gs.fatal("No data to import. Specify layers= and/or huc_level=.")
 
     bbox = get_geographic_bbox()
     gs.message("Bounding box (WGS84): W={:.4f} S={:.4f} E={:.4f} N={:.4f}".format(*bbox))
