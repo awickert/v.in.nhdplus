@@ -1,0 +1,171 @@
+<h2>DESCRIPTION</h2>
+
+<em>v.in.nhdplus</em> downloads stream flowlines and drainage catchments from the
+<a href="https://www.epa.gov/waterdata/nhdplus-national-hydrography-dataset-plus">NHDPlus</a>
+(National Hydrography Dataset Plus) within the current GRASS computational region
+and imports them as vector maps.
+
+<p>
+By default, NHDPlus version 2 (medium resolution, 1:100,000 scale) is downloaded.
+NHDPlus HR (high resolution, 1:24,000 scale) may be selected with
+<b>source=hr</b>. Data are fetched via the
+<a href="https://github.com/hyriver/pynhd">pynhd</a>
+Python library using the USGS Network Linked Data Index (NLDI) and related
+web services. No authentication is required.
+</p>
+
+<h2>NOTES</h2>
+
+<h3>Output maps</h3>
+
+<table>
+  <tr>
+    <th>type=</th><th>Output map</th><th>Geometry</th>
+  </tr>
+  <tr>
+    <td>flowlines</td>
+    <td><tt>&lt;output&gt;_flowlines</tt></td>
+    <td>Lines</td>
+  </tr>
+  <tr>
+    <td>catchments</td>
+    <td><tt>&lt;output&gt;_catchments</tt></td>
+    <td>Areas (polygons)</td>
+  </tr>
+  <tr>
+    <td>both (default)</td>
+    <td>both of the above</td>
+    <td></td>
+  </tr>
+</table>
+
+<p>
+Flowlines and catchments are linked by a common identifier:
+<tt>comid</tt> in the flowlines table and <tt>featureid</tt> in the
+catchments table. Each catchment corresponds to the drainage area of
+one flowline reach.
+</p>
+
+<h3>NHDPlus v2 attributes (flowlines)</h3>
+
+<table>
+  <tr><th>Column</th><th>Description</th></tr>
+  <tr><td>comid</td><td>Unique reach identifier (Common Identifier)</td></tr>
+  <tr><td>gnis_name</td><td>Geographic Names Information System stream name</td></tr>
+  <tr><td>streamorde</td><td>Strahler stream order</td></tr>
+  <tr><td>streamcalc</td><td>Calculated stream order (excludes divergences)</td></tr>
+  <tr><td>areasqkm</td><td>Local catchment area (km²)</td></tr>
+  <tr><td>totdasqkm</td><td>Total upstream drainage area (km²)</td></tr>
+  <tr><td>lengthkm</td><td>Reach length (km)</td></tr>
+  <tr><td>ftype</td><td>Feature type (StreamRiver, ArtificialPath, etc.)</td></tr>
+  <tr><td>reachcode</td><td>14-digit reach code</td></tr>
+</table>
+
+<h3>Filtering by stream order</h3>
+
+<p>
+For large regions, importing all streams (Strahler order 1 and higher) may
+return tens of thousands of features. Use <b>min_order=</b> to restrict
+the import to larger streams:
+</p>
+
+<ul>
+  <li><tt>min_order=1</tt> — all streams (default)</li>
+  <li><tt>min_order=3</tt> — streams draining roughly &gt;10 km²</li>
+  <li><tt>min_order=5</tt> — major rivers only</li>
+</ul>
+
+<p>
+The <tt>min_order</tt> filter applies to <tt>streamorde</tt> (Strahler order)
+and is applied after download. Catchments are not filtered by stream order.
+</p>
+
+<h3>NHDPlus v2 vs. NHDPlus HR</h3>
+
+<p>
+NHDPlus v2 (<b>source=v2</b>, default) is derived from the 1:100,000-scale
+National Hydrography Dataset. It includes rich attribute tables with flow
+statistics (mean annual flow, velocity) and is the standard for large-scale
+hydrological analysis. Coverage: contiguous US, Hawaii, Puerto Rico, and
+US territories.
+</p>
+
+<p>
+NHDPlus HR (<b>source=hr</b>) is derived from the 1:24,000-scale NHD and
+provides greater spatial detail for smaller catchments. It has fewer computed
+attributes than v2 but is preferred for local-scale analysis. Coverage is
+expanding but may not cover all regions.
+</p>
+
+<h3>Relationship to v.in.waterdata</h3>
+
+<p>
+<em><a href="v.in.waterdata.html">v.in.waterdata</a></em> downloads USGS
+streamflow gauge time series and upstream basin delineations.
+<em>v.in.nhdplus</em> downloads the underlying river network geometry and
+catchments. They are complementary: use v.in.waterdata for discharge
+observations and v.in.nhdplus for the spatial river framework. Gauge sites
+can be linked to NHDPlus reaches via their COMID (available in v.in.waterdata
+output attributes).
+</p>
+
+<h2>EXAMPLES</h2>
+
+Import flowlines and catchments within the current region:
+<div class="code"><pre>
+v.in.nhdplus output=nhd
+</pre></div>
+
+Import only major rivers (Strahler order ≥ 4):
+<div class="code"><pre>
+v.in.nhdplus output=nhd type=flowlines min_order=4
+</pre></div>
+
+Import catchments only:
+<div class="code"><pre>
+v.in.nhdplus output=nhd type=catchments
+</pre></div>
+
+Import NHDPlus HR flowlines:
+<div class="code"><pre>
+v.in.nhdplus output=nhd_hr type=flowlines source=hr
+</pre></div>
+
+Display stream network coloured by order:
+<div class="code"><pre>
+v.in.nhdplus output=nhd min_order=2
+d.vect nhd_flowlines color=blue width_column=streamorde
+</pre></div>
+
+Join catchments to gauge basin data from v.in.waterdata:
+<div class="code"><pre>
+v.db.join map=nhd_catchments column=featureid \
+    otable=gauges_basins ocolumn=comid
+</pre></div>
+
+<h2>REQUIREMENTS</h2>
+
+<ul>
+  <li>Python package <tt>pynhd</tt> (HyRiver suite) —
+      <tt>pip3 install --break-system-packages pynhd</tt></li>
+  <li>Python packages: <tt>geopandas</tt>, <tt>shapely</tt></li>
+</ul>
+
+<h2>SEE ALSO</h2>
+
+<em>
+<a href="v.in.waterdata.html">v.in.waterdata</a>,
+<a href="v.in.ghcn.html">v.in.ghcn</a>,
+<a href="v.interp.timeseries.html">v.interp.timeseries</a>,
+<a href="v.db.join.html">v.db.join</a>
+</em>
+
+<h2>REFERENCES</h2>
+
+McKay, L., Bondelid, T., Dewald, T., Johnston, J., Moore, R., Rea, A. (2012):
+NHDPlus Version 2: User Guide.
+<em>US Environmental Protection Agency</em>.
+
+<h2>AUTHOR</h2>
+
+Andrew Wickert
