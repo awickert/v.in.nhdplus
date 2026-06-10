@@ -1,9 +1,16 @@
 <h2>DESCRIPTION</h2>
 
-<em>v.in.nhdplus</em> downloads stream flowlines and drainage catchments from the
+<em>v.in.nhdplus</em> downloads stream flowlines, drainage catchments, and
+Watershed Boundary Dataset (WBD) watershed units from
 <a href="https://www.epa.gov/waterdata/nhdplus-national-hydrography-dataset-plus">NHDPlus</a>
-(National Hydrography Dataset Plus) within the current GRASS computational region
-and imports them as vector maps.
+and imports them as GRASS vector maps.
+
+<p>
+Data may be fetched for the current GRASS computational region, or restricted
+to specific HUC (Hydrologic Unit Code) watersheds via the <b>hucs=</b> option.
+WBD watershed boundaries at any HUC level (2–12) may be imported separately or
+in the same run via <b>huc_level=</b>.
+</p>
 
 <p>
 By default, NHDPlus version 2 (medium resolution, 1:100,000 scale) is downloaded.
@@ -20,22 +27,27 @@ web services. No authentication is required.
 
 <table>
   <tr>
-    <th>type=</th><th>Output map</th><th>Geometry</th>
+    <th>Option</th><th>Output map</th><th>Geometry</th>
   </tr>
   <tr>
-    <td>flowlines</td>
+    <td>type=flowlines</td>
     <td><tt>&lt;output&gt;_flowlines</tt></td>
     <td>Lines</td>
   </tr>
   <tr>
-    <td>catchments</td>
+    <td>type=catchments</td>
     <td><tt>&lt;output&gt;_catchments</tt></td>
     <td>Areas (polygons)</td>
   </tr>
   <tr>
-    <td>both (default)</td>
+    <td>type=both (default)</td>
     <td>both of the above</td>
     <td></td>
+  </tr>
+  <tr>
+    <td>huc_level=N</td>
+    <td><tt>&lt;output&gt;_hucN</tt></td>
+    <td>Areas (polygons)</td>
   </tr>
 </table>
 
@@ -80,6 +92,38 @@ The <tt>min_order</tt> filter applies to <tt>streamorde</tt> (Strahler order)
 and is applied after download. Catchments are not filtered by stream order.
 </p>
 
+<h3>HUC spatial filtering (hucs=)</h3>
+
+<p>
+Instead of the bounding box, flowlines and catchments can be fetched within one
+or more specific HUC watersheds. Supply HUC codes as a comma-separated list;
+the level is inferred automatically from code length:
+</p>
+
+<table>
+  <tr><th>Code length</th><th>Level</th><th>Approximate scale</th></tr>
+  <tr><td>2 digits</td><td>HUC2 — Region</td><td>~large river basins (21 in CONUS)</td></tr>
+  <tr><td>4 digits</td><td>HUC4 — Subregion</td><td>~222 units</td></tr>
+  <tr><td>6 digits</td><td>HUC6 — Basin</td><td>~378 units</td></tr>
+  <tr><td>8 digits</td><td>HUC8 — Subbasin</td><td>~2,250 units; most common for modeling</td></tr>
+  <tr><td>10 digits</td><td>HUC10 — Watershed</td><td>~22,000 units</td></tr>
+  <tr><td>12 digits</td><td>HUC12 — Subwatershed</td><td>~160,000 units; finest standard level</td></tr>
+</table>
+
+<p>
+All codes supplied must be the same level. The HUC boundaries are retrieved
+and dissolved to form the spatial filter applied to flowline and catchment queries.
+</p>
+
+<h3>WBD boundary download (huc_level=)</h3>
+
+<p>
+When <b>huc_level=</b> is specified, watershed boundary polygons at that HUC level
+are imported as a separate map (<tt>&lt;output&gt;_hucN</tt>). This may be combined
+with <b>hucs=</b> to download only the specified HUCs, or used alone to import all
+WBD units intersecting the current region.
+</p>
+
 <h3>NHDPlus v2 vs. NHDPlus HR</h3>
 
 <p>
@@ -121,14 +165,30 @@ Import only major rivers (Strahler order ≥ 4):
 v.in.nhdplus output=nhd type=flowlines min_order=4
 </pre></div>
 
-Import catchments only:
+Import flowlines and catchments for specific HUC8 subbasins:
 <div class="code"><pre>
-v.in.nhdplus output=nhd type=catchments
+v.in.nhdplus output=nhd hucs=10190005,10190006
 </pre></div>
 
-Import NHDPlus HR flowlines:
+Import everything for a HUC4 subregion, including the HUC8 boundaries:
 <div class="code"><pre>
-v.in.nhdplus output=nhd_hr type=flowlines source=hr
+v.in.nhdplus output=nhd hucs=1019 huc_level=8
+</pre></div>
+
+Download WBD HUC12 boundaries within the current region only (no flowlines):
+<div class="code"><pre>
+v.in.nhdplus output=nhd type=flowlines huc_level=12 min_order=99
+# (min_order=99 skips flowlines effectively; or set type= to something unused)
+</pre></div>
+
+Download HUC8 boundaries and flowlines for a HUC2 region:
+<div class="code"><pre>
+v.in.nhdplus output=nhd hucs=10 huc_level=8 min_order=4
+</pre></div>
+
+Import NHDPlus HR for a small watershed:
+<div class="code"><pre>
+v.in.nhdplus output=nhd_hr source=hr hucs=1019000501
 </pre></div>
 
 Display stream network coloured by order:
