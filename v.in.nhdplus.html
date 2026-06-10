@@ -45,8 +45,13 @@ web services. No authentication is required.
     <td></td>
   </tr>
   <tr>
-    <td>huc_level=N</td>
+    <td>type=none + huc_level=N</td>
     <td><tt>&lt;output&gt;_hucN</tt></td>
+    <td>Areas (polygons) — WBD only, no flowlines or catchments</td>
+  </tr>
+  <tr>
+    <td>huc_level=N (any type=)</td>
+    <td><tt>&lt;output&gt;_hucN</tt> in addition to above</td>
     <td>Areas (polygons)</td>
   </tr>
 </table>
@@ -205,10 +210,14 @@ Import everything for a HUC4 subregion, including the HUC8 boundaries:
 v.in.nhdplus output=nhd hucs=1019 huc_level=8
 </pre></div>
 
-Download WBD HUC12 boundaries within the current region only (no flowlines):
+Download WBD HUC12 boundaries only (no flowlines or catchments):
 <div class="code"><pre>
-v.in.nhdplus output=nhd type=flowlines huc_level=12 min_order=99
-# (min_order=99 skips flowlines effectively; or set type= to something unused)
+v.in.nhdplus output=nhd type=none huc_level=12
+</pre></div>
+
+Download HUC8 subbasin boundaries for a specific HUC2 region, no stream network:
+<div class="code"><pre>
+v.in.nhdplus output=nhd type=none hucs=14 huc_level=8
 </pre></div>
 
 Download HUC8 boundaries and flowlines for a HUC2 region:

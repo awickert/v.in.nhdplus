@@ -37,9 +37,10 @@
 #%  key: type
 #%  type: string
 #%  label: Feature type(s) to import
-#%  options: flowlines,catchments,both
+#%  options: flowlines,catchments,both,none
 #%  answer: both
 #%  required: yes
+#%  description: Use none to import only WBD boundaries (requires huc_level=)
 #%end
 
 #%option
@@ -297,6 +298,9 @@ def main():
     do_catchments = feat_type in ('catchments', 'both')
     do_wbd        = bool(huc_level_str)
     wbd_level     = int(huc_level_str) if huc_level_str else None
+
+    if feat_type == 'none' and not do_wbd:
+        gs.fatal("type=none requires huc_level= to have something to import.")
 
     bbox = get_geographic_bbox()
     gs.message("Bounding box (WGS84): W={:.4f} S={:.4f} E={:.4f} N={:.4f}".format(*bbox))
