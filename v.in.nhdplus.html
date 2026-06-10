@@ -171,6 +171,28 @@ relative to the query area (bounding box or dissolved HUC boundary):
 </table>
 
 <p>
+The two options are <b>alternatives</b> for handling boundary features, not
+complements:
+</p>
+
+<ul>
+  <li><b>spatial_relation=within</b> — excludes partial features entirely;
+      the result contains fewer features but all are geometrically complete.</li>
+  <li><b>-c</b> — retains all features but clips their geometries at the
+      region boundary; the result is spatially exhaustive but some features
+      are truncated.</li>
+</ul>
+
+<p>
+Using both together is redundant in the typical case (no <b>hucs=</b>): if
+every feature is already fully within the region, clipping changes nothing.
+The combination is only meaningful when <b>hucs=</b> defines a spatial domain
+larger than the computational region — in that case <tt>spatial_relation=within</tt>
+filters against the HUC boundary while <tt>-c</tt> clips to the (smaller)
+region, and the two operations act on different geometries.
+</p>
+
+<p>
 The distinction matters most for polygon features (catchments, WBD units) at
 region boundaries. For flowlines it affects only reaches that cross the boundary.
 </p>
@@ -292,11 +314,6 @@ Import and clip to the computational region:
 v.in.nhdplus output=nhd -c
 </pre></div>
 
-Strictly enclosed HUC8 units within a HUC2 region, clipped:
-<div class="code"><pre>
-v.in.nhdplus output=nhd type=none hucs=14 huc_level=8 \
-    spatial_relation=within -c
-</pre></div>
 
 Join catchments to gauge basin data from v.in.waterdata:
 <div class="code"><pre>
