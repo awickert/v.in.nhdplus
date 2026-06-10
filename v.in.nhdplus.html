@@ -27,30 +27,30 @@ web services. No authentication is required.
 
 <table>
   <tr>
-    <th>Option</th><th>Output map</th><th>Geometry</th>
+    <th>layers=</th><th>Output map</th><th>Geometry</th>
   </tr>
   <tr>
-    <td>type=flowlines</td>
+    <td>flowlines</td>
     <td><tt>&lt;output&gt;_flowlines</tt></td>
     <td>Lines</td>
   </tr>
   <tr>
-    <td>type=catchments</td>
+    <td>catchments</td>
     <td><tt>&lt;output&gt;_catchments</tt></td>
     <td>Areas (polygons)</td>
   </tr>
   <tr>
-    <td>type=both (default)</td>
+    <td>flowlines,catchments (default)</td>
     <td>both of the above</td>
     <td></td>
   </tr>
   <tr>
-    <td>type=none + huc_level=N</td>
+    <td>(omitted) + huc_level=N</td>
     <td><tt>&lt;output&gt;_hucN</tt></td>
-    <td>Areas (polygons) — WBD only, no flowlines or catchments</td>
+    <td>Areas (polygons) — WBD only</td>
   </tr>
   <tr>
-    <td>huc_level=N (any type=)</td>
+    <td>(any) + huc_level=N</td>
     <td><tt>&lt;output&gt;_hucN</tt> in addition to above</td>
     <td>Areas (polygons)</td>
   </tr>
@@ -235,7 +235,7 @@ v.in.nhdplus output=nhd
 
 Import only major rivers (Strahler order ≥ 4):
 <div class="code"><pre>
-v.in.nhdplus output=nhd type=flowlines min_order=4
+v.in.nhdplus output=nhd layers=flowlines min_order=4
 </pre></div>
 
 Import flowlines and catchments for specific HUC8 subbasins:
@@ -250,12 +250,12 @@ v.in.nhdplus output=nhd hucs=1019 huc_level=8
 
 Download WBD HUC12 boundaries only (no flowlines or catchments):
 <div class="code"><pre>
-v.in.nhdplus output=nhd type=none huc_level=12
+v.in.nhdplus output=nhd huc_level=12
 </pre></div>
 
 Download HUC8 subbasin boundaries for a specific HUC2 region, no stream network:
 <div class="code"><pre>
-v.in.nhdplus output=nhd type=none hucs=14 huc_level=8
+v.in.nhdplus output=nhd hucs=14 huc_level=8
 </pre></div>
 
 Download HUC8 boundaries and flowlines for a HUC2 region:
@@ -276,7 +276,7 @@ d.vect nhd_flowlines color=blue width_column=streamorde
 
 Import only catchments fully enclosed by the region (no partial polygons):
 <div class="code"><pre>
-v.in.nhdplus output=nhd type=catchments boundary=complete
+v.in.nhdplus output=nhd layers=catchments boundary=complete
 </pre></div>
 
 Import and clip all features to the query area boundary:
