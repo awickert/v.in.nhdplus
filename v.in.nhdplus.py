@@ -95,6 +95,9 @@ import atexit
 
 import grass.script as gs
 
+if os.path.exists('/usr/share/proj/proj.db'):
+    os.environ['PROJ_DATA'] = '/usr/share/proj'
+
 _TMPFILES = []
 _TMPVECTS = []
 
@@ -145,7 +148,7 @@ def get_geographic_bbox():
 
     def _to_ll(x, y):
         out = gs.read_command('m.proj', coordinates='{},{}'.format(x, y),
-                              flags='d', quiet=True)
+                              flags='od', quiet=True)
         lon, lat = out.strip().split('|')[:2]
         return float(lon), float(lat)
 
