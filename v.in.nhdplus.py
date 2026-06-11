@@ -143,24 +143,15 @@ def get_geographic_bbox():
     if proj_name in ('ll', 'longlat'):
         return region['w'], region['s'], region['e'], region['n']
 
-    corners = [
-        (region['w'], region['s']), (region['w'], region['n']),
-        (region['e'], region['s']), (region['e'], region['n']),
-    ]
-    lons, lats = [], []
-    for x, y in corners:
-        proc = gs.Popen(
-            ['m.proj', '-i', 'coordinates={},{}'.format(x, y), 'separator=space'],
-            stdout=gs.PIPE, stderr=gs.PIPE
-        )
-        out, _ = proc.communicate()
-        parts = out.decode().strip().split()
-        if len(parts) >= 2:
-            lons.append(float(parts[0]))
-            lats.append(float(parts[1]))
-    if not lons:
-        gs.fatal("Could not determine geographic bounding box.")
-    return min(lons), min(lats), max(lons), max(lats)
+    def _to_ll(x, y):
+        out = gs.read_command('m.proj', coordinates='{},{}'.format(x, y),
+                              flags='d', quiet=True)
+        lon, lat = out.strip().split('|')[:2]
+        return float(lon), float(lat)
+
+    sw_lon, sw_lat = _to_ll(region['w'], region['s'])
+    ne_lon, ne_lat = _to_ll(region['e'], region['n'])
+    return sw_lon, sw_lat, ne_lon, ne_lat
 
 
 def apply_spatial_relation(gdf, query_geom, relation):
