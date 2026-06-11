@@ -170,9 +170,7 @@ def apply_spatial_relation(gdf, query_geom, relation):
 
 def geodataframe_to_grass(gdf, output):
     """Write a GeoDataFrame to a GRASS vector map via GeoPackage + v.import."""
-    if (os.path.exists('/usr/share/proj/proj.db')
-            and not os.environ.get('PROJ_DATA')
-            and not os.environ.get('PROJ_LIB')):
+    if os.path.exists('/usr/share/proj/proj.db'):
         os.environ['PROJ_DATA'] = '/usr/share/proj'
 
     for col in gdf.columns:
